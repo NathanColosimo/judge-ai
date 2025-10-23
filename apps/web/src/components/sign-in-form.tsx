@@ -20,7 +20,7 @@ import { Label } from "./ui/label";
 // Define validation schema
 const signInSchema = z.object({
   email: z.email("Invalid email address"),
-  password: z.string()
+  password: z.string(),
 });
 
 type SignInFormData = z.infer<typeof signInSchema>;
