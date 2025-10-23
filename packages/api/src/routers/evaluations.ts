@@ -28,6 +28,167 @@ const evaluationSchema = z.object({
   confidence: z.number().min(0).max(1).optional(),
 });
 
+// Helper function to run a single evaluation
+async function runSingleEvaluation(
+  question: typeof questions.$inferSelect,
+  judge: typeof judges.$inferSelect
+): Promise<{ success: boolean; evaluation?: typeof evaluations.$inferSelect }> {
+  try {
+    // Build the prompt for the AI
+    const prompt = `Question: ${question.questionText}
+Question Type: ${question.questionType}
+
+User's Answer:
+${question.answerChoice ? `Choice: ${question.answerChoice}` : ""}
+${question.answerReasoning ? `Reasoning: ${question.answerReasoning}` : ""}
+
+Evaluate this answer according to the rubric provided in the system prompt.`;
+
+    // Track start time for latency measurement
+    const startTime = Date.now();
+
+    // Call AI SDK to generate structured evaluation
+    const result = await generateObject({
+      model: openrouter(judge.modelName),
+      system: judge.systemPrompt,
+      prompt,
+      schema: evaluationSchema,
+    });
+
+    const latencyMs = Date.now() - startTime;
+
+    // Store evaluation in database
+    const [evaluation] = await db
+      .insert(evaluations)
+      .values({
+        id: nanoid(),
+        questionId: question.id,
+        judgeId: judge.id,
+        verdict: result.object.verdict,
+        reasoning: result.object.reasoning,
+        rawResponse: {
+          object: result.object,
+          finishReason: result.finishReason,
+          usage: result.usage,
+          response: {
+            id: result.response.id,
+            timestamp: result.response.timestamp.toISOString(),
+            modelId: result.response.modelId,
+          },
+        },
+        tokensUsed: result.usage.totalTokens,
+        latencyMs,
+        error: null,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return { success: true, evaluation };
+  } catch (error) {
+    // Store failed evaluation with error details
+    await db
+      .insert(evaluations)
+      .values({
+        id: nanoid(),
+        questionId: question.id,
+        judgeId: judge.id,
+        verdict: "inconclusive",
+        reasoning: error instanceof Error ? error.message : "Unknown error",
+        rawResponse: { error: true },
+        tokensUsed: 0,
+        latencyMs: 0,
+        error: error instanceof Error ? error.message : "Unknown error",
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return { success: false };
+  }
+}
+
+// Helper function to fetch assignments for a queue
+function fetchQueueAssignments(queueId: string, userId: string) {
+  return db
+    .select({
+      assignment: queueJudgeAssignments,
+      judge: judges,
+    })
+    .from(queueJudgeAssignments)
+    .leftJoin(judges, eq(queueJudgeAssignments.judgeId, judges.id))
+    .where(
+      and(
+        eq(queueJudgeAssignments.queueId, queueId),
+        eq(queueJudgeAssignments.userId, userId)
+      )
+    );
+}
+
+// Helper function to fetch questions for a queue
+function fetchQueueQuestions(queueId: string, userId: string) {
+  return db
+    .select({
+      question: questions,
+      submission: submissions,
+    })
+    .from(questions)
+    .leftJoin(submissions, eq(questions.submissionId, submissions.id))
+    .where(and(eq(questions.queueId, queueId), eq(submissions.userId, userId)));
+}
+
+// Helper function to build evaluation promises
+function buildEvaluationPromises(
+  assignments: Awaited<ReturnType<typeof fetchQueueAssignments>>,
+  queueQuestions: Awaited<ReturnType<typeof fetchQueueQuestions>>
+) {
+  const evaluationPromises: Promise<{
+    success: boolean;
+    evaluation?: typeof evaluations.$inferSelect;
+  }>[] = [];
+
+  for (const { assignment, judge } of assignments) {
+    if (!judge) {
+      continue;
+    }
+
+    const matchingQuestions = queueQuestions.filter(
+      (q) => q.question.questionId === assignment.questionId
+    );
+
+    for (const { question } of matchingQuestions) {
+      evaluationPromises.push(runSingleEvaluation(question, judge));
+    }
+  }
+
+  return evaluationPromises;
+}
+
+// Helper function to process evaluation results
+function processEvaluationResults(
+  results: PromiseSettledResult<{
+    success: boolean;
+    evaluation?: typeof evaluations.$inferSelect;
+  }>[]
+) {
+  const evaluationResults: (typeof evaluations.$inferSelect)[] = [];
+  let completedCount = 0;
+  let failedCount = 0;
+
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      if (result.value.success && result.value.evaluation) {
+        evaluationResults.push(result.value.evaluation);
+        completedCount += 1;
+      } else {
+        failedCount += 1;
+      }
+    } else {
+      failedCount += 1;
+    }
+  }
+
+  return { evaluationResults, completedCount, failedCount };
+}
+
 // Router
 export const evaluationsRouter = {
   // Run evaluations for a queue
@@ -39,142 +200,27 @@ export const evaluationsRouter = {
         throw new Error("User not authenticated");
       }
 
-      // Fetch all judge assignments for this queue
-      const assignments = await db
-        .select({
-          assignment: queueJudgeAssignments,
-          judge: judges,
-        })
-        .from(queueJudgeAssignments)
-        .leftJoin(judges, eq(queueJudgeAssignments.judgeId, judges.id))
-        .where(
-          and(
-            eq(queueJudgeAssignments.queueId, input.queueId),
-            eq(queueJudgeAssignments.userId, userId)
-          )
-        );
-
+      // Fetch assignments and questions
+      const assignments = await fetchQueueAssignments(input.queueId, userId);
       if (assignments.length === 0) {
         throw new Error("No judge assignments found for this queue");
       }
 
-      // Fetch all questions for this queue that match assigned question IDs
-      const queueQuestions = await db
-        .select({
-          question: questions,
-          submission: submissions,
-        })
-        .from(questions)
-        .leftJoin(submissions, eq(questions.submissionId, submissions.id))
-        .where(
-          and(
-            eq(questions.queueId, input.queueId),
-            eq(submissions.userId, userId)
-          )
-        );
-
+      const queueQuestions = await fetchQueueQuestions(input.queueId, userId);
       if (queueQuestions.length === 0) {
         throw new Error("No questions found for this queue");
       }
 
-      const evaluationResults: (typeof evaluations.$inferSelect)[] = [];
-      let completedCount = 0;
-      let failedCount = 0;
+      // Build and run all evaluation promises in parallel
+      const evaluationPromises = buildEvaluationPromises(
+        assignments,
+        queueQuestions
+      );
+      const results = await Promise.allSettled(evaluationPromises);
 
-      // For each question × judge assignment
-      for (const { assignment, judge } of assignments) {
-        if (!judge) {
-          continue;
-        }
-
-        // Find all questions that match this assignment's questionId
-        const matchingQuestions = queueQuestions.filter(
-          (q) => q.question.questionId === assignment.questionId
-        );
-
-        for (const { question } of matchingQuestions) {
-          try {
-            // Build the prompt for the AI
-            const prompt = `Question: ${question.questionText}
-Question Type: ${question.questionType}
-
-User's Answer:
-${question.answerChoice ? `Choice: ${question.answerChoice}` : ""}
-${question.answerReasoning ? `Reasoning: ${question.answerReasoning}` : ""}
-
-Evaluate this answer according to the rubric provided in the system prompt.`;
-
-            // Track start time for latency measurement
-            const startTime = Date.now();
-
-            // Call AI SDK to generate structured evaluation
-            const result = await generateObject({
-              model: openrouter(judge.modelName),
-              system: judge.systemPrompt,
-              prompt,
-              schema: evaluationSchema,
-            });
-
-            const latencyMs = Date.now() - startTime;
-
-            // Store evaluation in database
-            const [evaluation] = await db
-              .insert(evaluations)
-              .values({
-                id: nanoid(),
-                questionId: question.id, // Now references the questions table
-                judgeId: judge.id,
-                verdict: result.object.verdict,
-                reasoning: result.object.reasoning,
-                rawResponse: {
-                  object: result.object,
-                  finishReason: result.finishReason,
-                  usage: result.usage,
-                  response: {
-                    id: result.response.id,
-                    timestamp: result.response.timestamp.toISOString(),
-                    modelId: result.response.modelId,
-                  },
-                },
-                tokensUsed: result.usage.totalTokens,
-                latencyMs,
-                error: null,
-                createdAt: new Date(),
-              })
-              .returning();
-
-            if (evaluation) {
-              evaluationResults.push(evaluation);
-              completedCount += 1;
-            }
-          } catch (error) {
-            failedCount += 1;
-
-            // Store failed evaluation with error details
-            try {
-              await db
-                .insert(evaluations)
-                .values({
-                  id: nanoid(),
-                  questionId: question.id,
-                  judgeId: judge.id,
-                  verdict: "inconclusive",
-                  reasoning:
-                    error instanceof Error ? error.message : "Unknown error",
-                  rawResponse: { error: true },
-                  tokensUsed: 0,
-                  latencyMs: 0,
-                  error:
-                    error instanceof Error ? error.message : "Unknown error",
-                  createdAt: new Date(),
-                })
-                .returning();
-            } catch (secondaryError) {
-              console.error(secondaryError);
-            }
-          }
-        }
-      }
+      // Process results
+      const { evaluationResults, completedCount, failedCount } =
+        processEvaluationResults(results);
 
       return {
         success: true,
