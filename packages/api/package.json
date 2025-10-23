@@ -23,14 +23,16 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@orpc/server": "^1.10.0",
+    "@judge-ai/auth": "*",
+    "@judge-ai/db": "*",
     "@orpc/client": "^1.10.0",
     "@orpc/openapi": "^1.10.0",
+    "@orpc/server": "^1.10.0",
     "@orpc/zod": "^1.10.0",
-    "hono": "^4.8.2",
+    "ai": "^5.0.77",
     "dotenv": "^17.2.2",
-    "zod": "^4.1.11",
-    "@judge-ai/auth": "*",
-    "@judge-ai/db": "*"
+    "hono": "^4.8.2",
+    "nanoid": "^5.1.6",
+    "zod": "^4.1.11"
   }
 }

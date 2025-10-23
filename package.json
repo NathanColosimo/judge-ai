@@ -14,7 +14,6 @@
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F @judge-ai/db db:push",
     "db:studio": "turbo -F @judge-ai/db db:studio",
     "db:generate": "turbo -F @judge-ai/db db:generate",
     "db:migrate": "turbo -F @judge-ai/db db:migrate"
