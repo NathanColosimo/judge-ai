@@ -5,6 +5,7 @@ import {
   queueJudgeAssignments,
   submissions,
 } from "@judge-ai/db";
+import { gateway, generateObject } from "ai";
 import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -13,6 +14,15 @@ import { protectedProcedure } from "../index";
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const PASS_RATE_PRECISION = 2;
+const MIN_REASONING_LENGTH = 10;
+const MAX_REASONING_LENGTH = 500;
+
+// Evaluation schema for structured output
+const evaluationSchema = z.object({
+  verdict: z.enum(["pass", "fail", "inconclusive"]),
+  reasoning: z.string().min(MIN_REASONING_LENGTH).max(MAX_REASONING_LENGTH),
+  confidence: z.number().min(0).max(1).optional(),
+});
 
 // Router
 export const evaluationsRouter = {
@@ -93,10 +103,30 @@ export const evaluationsRouter = {
           }
 
           try {
-            // TODO: Call AI SDK here
-            // For now, create a placeholder evaluation
-            // In the next step, we'll implement the actual AI call
+            // Build the prompt for the AI
+            const prompt = `Question: ${question.data.questionText}
+Question Type: ${question.data.questionType}
 
+User's Answer:
+${answer.choice ? `Choice: ${answer.choice}` : ""}
+${answer.reasoning ? `Reasoning: ${answer.reasoning}` : ""}
+
+Evaluate this answer according to the rubric provided in the system prompt.`;
+
+            // Track start time for latency measurement
+            const startTime = Date.now();
+
+            // Call AI SDK to generate structured evaluation
+            const result = await generateObject({
+              model: gateway(judge.modelName),
+              system: judge.systemPrompt,
+              prompt,
+              schema: evaluationSchema,
+            });
+
+            const latencyMs = Date.now() - startTime;
+
+            // Store evaluation in database
             const [evaluation] = await db
               .insert(evaluations)
               .values({
@@ -104,21 +134,50 @@ export const evaluationsRouter = {
                 submissionId: submission.id,
                 judgeId: judge.id,
                 questionId,
-                verdict: "inconclusive", // Placeholder
-                reasoning: "Evaluation pending - AI integration needed",
-                rawResponse: { pending: true },
-                tokensUsed: 0,
-                latencyMs: 0,
+                verdict: result.object.verdict,
+                reasoning: result.object.reasoning,
+                rawResponse: {
+                  object: result.object,
+                  finishReason: result.finishReason,
+                  usage: result.usage,
+                  response: {
+                    id: result.response.id,
+                    timestamp: result.response.timestamp.toISOString(),
+                    modelId: result.response.modelId,
+                  },
+                },
+                tokensUsed: result.usage.totalTokens,
+                latencyMs,
                 error: null,
                 createdAt: new Date(),
               })
               .returning();
 
-            evaluationResults.push(evaluation);
-            completedCount += 1;
+            if (evaluation) {
+              evaluationResults.push(evaluation);
+              completedCount += 1;
+            }
           } catch (error) {
             failedCount += 1;
-            // Error logged in database, continue processing
+
+            // Store failed evaluation with error details
+            try {
+              await db.insert(evaluations).values({
+                id: nanoid(),
+                submissionId: submission.id,
+                judgeId: judge.id,
+                questionId,
+                verdict: "inconclusive",
+                reasoning: "Evaluation failed due to an error",
+                rawResponse: { error: true },
+                tokensUsed: 0,
+                latencyMs: 0,
+                error: error instanceof Error ? error.message : "Unknown error",
+                createdAt: new Date(),
+              });
+            } catch {
+              // If we can't even log the error, just continue
+            }
           }
         }
       }
@@ -250,6 +309,7 @@ export const evaluationsRouter = {
         (r) => r.evaluation.verdict === "inconclusive"
       ).length;
 
+      // biome-ignore lint/style/noMagicNumbers: Allow magic number for pass rate calculation
       const passRate = total > 0 ? (passCount / total) * 100 : 0;
 
       return {

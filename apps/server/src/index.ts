@@ -26,6 +26,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 const rpcHandler = new RPCHandler(appRouter, {
   interceptors: [
     onError((error) => {
+      // biome-ignore lint/suspicious/noConsole: Allow console.error
       console.error(error);
     }),
   ],

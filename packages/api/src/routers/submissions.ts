@@ -58,7 +58,9 @@ export const submissionsRouter = {
           })
           .returning();
 
-        insertedSubmissions.push(inserted[0]);
+        if (inserted[0]) {
+          insertedSubmissions.push(inserted[0]);
+        }
       }
 
       return {

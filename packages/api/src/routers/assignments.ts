@@ -54,7 +54,9 @@ export const assignmentsRouter = {
           })
           .returning();
 
-        inserted.push(assignment);
+        if (assignment) {
+          inserted.push(assignment);
+        }
       }
 
       return {
@@ -112,7 +114,9 @@ export const assignmentsRouter = {
           })
           .returning();
 
-        inserted.push(assignment);
+        if (assignment) {
+          inserted.push(assignment);
+        }
       }
 
       return {
