@@ -1,6 +1,6 @@
 {
-  "id": "00ccdb76-9c28-415d-9676-8bf467c5df36",
-  "prevId": "9ea31224-1f07-47c3-b2ef-eb5f76b22ab1",
+  "id": "87df38c2-cae9-4749-93fd-aed099d0ed3b",
+  "prevId": "4b6a0eda-6e2e-4169-ac6a-53f10ae129aa",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -14,20 +14,14 @@
           "primaryKey": true,
           "notNull": true
         },
-        "submission_id": {
-          "name": "submission_id",
+        "question_id": {
+          "name": "question_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "judge_id": {
           "name": "judge_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "question_id": {
-          "name": "question_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -78,12 +72,16 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "evaluations_submission_id_submissions_id_fk": {
-          "name": "evaluations_submission_id_submissions_id_fk",
+        "evaluations_question_id_questions_id_fk": {
+          "name": "evaluations_question_id_questions_id_fk",
           "tableFrom": "evaluations",
-          "tableTo": "submissions",
-          "columnsFrom": ["submission_id"],
-          "columnsTo": ["id"],
+          "tableTo": "questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -91,8 +89,12 @@
           "name": "evaluations_judge_id_judges_id_fk",
           "tableFrom": "evaluations",
           "tableTo": "judges",
-          "columnsFrom": ["judge_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "judge_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -101,7 +103,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.judges": {
       "name": "judges",
@@ -165,8 +167,12 @@
           "name": "judges_user_id_user_id_fk",
           "tableFrom": "judges",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -175,7 +181,101 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
+    },
+    "public.questions": {
+      "name": "questions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "submission_id": {
+          "name": "submission_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "queue_id": {
+          "name": "queue_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_text": {
+          "name": "question_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_type": {
+          "name": "question_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "question_data": {
+          "name": "question_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "answer_choice": {
+          "name": "answer_choice",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "answer_reasoning": {
+          "name": "answer_reasoning",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "answer_data": {
+          "name": "answer_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "questions_submission_id_submissions_id_fk": {
+          "name": "questions_submission_id_submissions_id_fk",
+          "tableFrom": "questions",
+          "tableTo": "submissions",
+          "columnsFrom": [
+            "submission_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
     },
     "public.queue_judge_assignments": {
       "name": "queue_judge_assignments",
@@ -225,8 +325,12 @@
           "name": "queue_judge_assignments_user_id_user_id_fk",
           "tableFrom": "queue_judge_assignments",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -234,8 +338,12 @@
           "name": "queue_judge_assignments_judge_id_judges_id_fk",
           "tableFrom": "queue_judge_assignments",
           "tableTo": "judges",
-          "columnsFrom": ["judge_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "judge_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -245,12 +353,16 @@
         "queue_judge_assignments_queue_id_question_id_judge_id_unique": {
           "name": "queue_judge_assignments_queue_id_question_id_judge_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["queue_id", "question_id", "judge_id"]
+          "columns": [
+            "queue_id",
+            "question_id",
+            "judge_id"
+          ]
         }
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.submissions": {
       "name": "submissions",
@@ -280,18 +392,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "questions": {
-          "name": "questions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "answers": {
-          "name": "answers",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -313,8 +413,12 @@
           "name": "submissions_user_id_user_id_fk",
           "tableFrom": "submissions",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -323,7 +427,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.account": {
       "name": "account",
@@ -414,8 +518,12 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -424,7 +532,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.session": {
       "name": "session",
@@ -485,8 +593,12 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -496,12 +608,14 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": ["token"]
+          "columns": [
+            "token"
+          ]
         }
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.user": {
       "name": "user",
@@ -557,12 +671,14 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": ["email"]
+          "columns": [
+            "email"
+          ]
         }
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.verification": {
       "name": "verification",
@@ -611,7 +727,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     }
   },
   "enums": {},

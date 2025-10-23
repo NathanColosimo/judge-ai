@@ -3,6 +3,7 @@ import { protectedProcedure, publicProcedure } from "../index";
 import { assignmentsRouter } from "./assignments";
 import { evaluationsRouter } from "./evaluations";
 import { judgesRouter } from "./judges";
+import { questionsRouter } from "./questions";
 import { submissionsRouter } from "./submissions";
 
 export const appRouter = {
@@ -23,6 +24,9 @@ export const appRouter = {
 
   // Evaluations routes
   evaluations: evaluationsRouter,
+
+  // Questions routes
+  questions: questionsRouter,
 };
 
 export type AppRouter = typeof appRouter;

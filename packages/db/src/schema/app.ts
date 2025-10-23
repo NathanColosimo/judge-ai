@@ -17,11 +17,26 @@ export const submissions = pgTable("submissions", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  questions: jsonb("questions").notNull(), // Array of question objects
-  answers: jsonb("answers").notNull(), // Object mapping question IDs to answers
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}).enableRLS();
+
+// Questions table - normalized storage for questions and answers
+export const questions = pgTable("questions", {
+  id: text("id").primaryKey(), // Composite: questionId + submissionId (e.g., "q_template_1_sub_1")
+  submissionId: text("submission_id")
+    .notNull()
+    .references(() => submissions.id, { onDelete: "cascade" }),
+  queueId: text("queue_id").notNull(), // Denormalized for faster queries
+  questionId: text("question_id").notNull(), // Original question ID from JSON (e.g., "q_template_1")
+  questionText: text("question_text").notNull(),
+  questionType: text("question_type").notNull(),
+  questionData: jsonb("question_data"), // Additional question metadata (rev, etc)
+  answerChoice: text("answer_choice"),
+  answerReasoning: text("answer_reasoning"),
+  answerData: jsonb("answer_data"), // Additional answer metadata
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}).enableRLS();
 
 // Judges table - AI judge definitions
 export const judges = pgTable("judges", {
@@ -35,9 +50,10 @@ export const judges = pgTable("judges", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Queue judge assignments - many-to-many mapping
+// Assigns judges to question IDs (not specific question rows, but the question template)
 export const queueJudgeAssignments = pgTable(
   "queue_judge_assignments",
   {
@@ -46,7 +62,7 @@ export const queueJudgeAssignments = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     queueId: text("queue_id").notNull(),
-    questionId: text("question_id").notNull(),
+    questionId: text("question_id").notNull(), // Original question ID from JSON (e.g., "q_template_1")
     judgeId: text("judge_id")
       .notNull()
       .references(() => judges.id, { onDelete: "cascade" }),
@@ -60,18 +76,17 @@ export const queueJudgeAssignments = pgTable(
       table.judgeId
     ),
   })
-);
+).enableRLS();
 
 // Evaluations table - stores evaluation results
 export const evaluations = pgTable("evaluations", {
   id: text("id").primaryKey(),
-  submissionId: text("submission_id")
+  questionId: text("question_id")
     .notNull()
-    .references(() => submissions.id, { onDelete: "cascade" }),
+    .references(() => questions.id, { onDelete: "cascade" }), // Now references questions table
   judgeId: text("judge_id")
     .notNull()
     .references(() => judges.id, { onDelete: "cascade" }),
-  questionId: text("question_id").notNull(),
   verdict: text("verdict").notNull(), // "pass" | "fail" | "inconclusive"
   reasoning: text("reasoning").notNull(),
   rawResponse: jsonb("raw_response"), // Full LLM response for debugging
@@ -79,4 +94,4 @@ export const evaluations = pgTable("evaluations", {
   latencyMs: integer("latency_ms"),
   error: text("error"), // If evaluation failed
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}).enableRLS();

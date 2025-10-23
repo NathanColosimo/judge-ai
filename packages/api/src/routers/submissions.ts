@@ -1,5 +1,5 @@
-import { db, submissions } from "@judge-ai/db";
-import { and, desc, eq } from "drizzle-orm";
+import { db, questions, submissions } from "@judge-ai/db";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure } from "../index";
 
@@ -44,22 +44,46 @@ export const submissionsRouter = {
       const insertedSubmissions: (typeof submissions.$inferSelect)[] = [];
 
       for (const submission of input) {
-        const inserted = await db
+        // Insert submission
+        const [insertedSubmission] = await db
           .insert(submissions)
           .values({
             id: submission.id,
             queueId: submission.queueId,
             labelingTaskId: submission.labelingTaskId || null,
             userId,
-            questions: submission.questions,
-            answers: submission.answers,
             createdAt: new Date(submission.createdAt),
             updatedAt: new Date(),
           })
           .returning();
 
-        if (inserted[0]) {
-          insertedSubmissions.push(inserted[0]);
+        if (insertedSubmission) {
+          insertedSubmissions.push(insertedSubmission);
+
+          // Insert questions with answers
+          const questionInserts = [];
+          for (const questionObj of submission.questions) {
+            const questionId = questionObj.data.id;
+            const answer = submission.answers[questionId];
+
+            questionInserts.push({
+              id: `${questionId}_${submission.id}`, // Composite ID
+              submissionId: submission.id,
+              queueId: submission.queueId,
+              questionId,
+              questionText: questionObj.data.questionText,
+              questionType: questionObj.data.questionType,
+              questionData: questionObj,
+              answerChoice: answer?.choice || null,
+              answerReasoning: answer?.reasoning || null,
+              answerData: answer || null,
+              createdAt: new Date(),
+            });
+          }
+
+          if (questionInserts.length > 0) {
+            await db.insert(questions).values(questionInserts);
+          }
         }
       }
 
@@ -90,16 +114,25 @@ export const submissionsRouter = {
         conditions.push(eq(submissions.queueId, input.queueId));
       }
 
+      // Get submissions with question counts
       const results = await db
-        .select()
+        .select({
+          submission: submissions,
+          questionCount: sql<number>`count(${questions.id})`,
+        })
         .from(submissions)
+        .leftJoin(questions, eq(questions.submissionId, submissions.id))
         .where(and(...conditions))
+        .groupBy(submissions.id)
         .orderBy(desc(submissions.createdAt))
         .limit(input.limit)
         .offset(input.offset);
 
       return {
-        submissions: results,
+        submissions: results.map((r) => ({
+          ...r.submission,
+          questionCount: Number(r.questionCount),
+        })),
         total: results.length,
       };
     }),
@@ -161,46 +194,26 @@ export const submissionsRouter = {
       throw new Error("User not authenticated");
     }
 
-    const userSubmissions = await db
-      .select()
+    // Query queue stats efficiently using aggregations
+    const queueStats = await db
+      .select({
+        queueId: submissions.queueId,
+        submissionCount: sql<number>`count(distinct ${submissions.id})`,
+        questionCount: sql<number>`count(distinct ${questions.questionId})`,
+        lastActivity: sql<Date>`max(${submissions.createdAt})`,
+      })
       .from(submissions)
-      .where(eq(submissions.userId, userId));
-
-    // Group by queueId and compute stats
-    const queuesMap = new Map<
-      string,
-      {
-        queueId: string;
-        submissionCount: number;
-        questionCount: number;
-        lastActivity: Date;
-      }
-    >();
-
-    for (const submission of userSubmissions) {
-      const queueId = submission.queueId;
-      const existing = queuesMap.get(queueId);
-
-      if (existing) {
-        existing.submissionCount += 1;
-        if (submission.createdAt > existing.lastActivity) {
-          existing.lastActivity = submission.createdAt;
-        }
-      } else {
-        const questions = submission.questions as Array<{
-          data: { id: string };
-        }>;
-        queuesMap.set(queueId, {
-          queueId,
-          submissionCount: 1,
-          questionCount: questions.length,
-          lastActivity: submission.createdAt,
-        });
-      }
-    }
+      .leftJoin(questions, eq(questions.submissionId, submissions.id))
+      .where(eq(submissions.userId, userId))
+      .groupBy(submissions.queueId);
 
     return {
-      queues: Array.from(queuesMap.values()),
+      queues: queueStats.map((stat) => ({
+        queueId: stat.queueId,
+        submissionCount: Number(stat.submissionCount),
+        questionCount: Number(stat.questionCount),
+        lastActivity: stat.lastActivity,
+      })),
     };
   }),
 };

@@ -2,6 +2,7 @@ import {
   db,
   evaluations,
   judges,
+  questions,
   queueJudgeAssignments,
   submissions,
 } from "@judge-ai/db";
@@ -35,22 +36,7 @@ export const evaluationsRouter = {
         throw new Error("User not authenticated");
       }
 
-      // Fetch all submissions for this queue
-      const queueSubmissions = await db
-        .select()
-        .from(submissions)
-        .where(
-          and(
-            eq(submissions.queueId, input.queueId),
-            eq(submissions.userId, userId)
-          )
-        );
-
-      if (queueSubmissions.length === 0) {
-        throw new Error("No submissions found for this queue");
-      }
-
-      // Fetch all assignments for this queue
+      // Fetch all judge assignments for this queue
       const assignments = await db
         .select({
           assignment: queueJudgeAssignments,
@@ -69,47 +55,52 @@ export const evaluationsRouter = {
         throw new Error("No judge assignments found for this queue");
       }
 
+      // Fetch all questions for this queue that match assigned question IDs
+      const assignedQuestionIds = assignments.map(
+        (a) => a.assignment.questionId
+      );
+      const queueQuestions = await db
+        .select({
+          question: questions,
+          submission: submissions,
+        })
+        .from(questions)
+        .leftJoin(submissions, eq(questions.submissionId, submissions.id))
+        .where(
+          and(
+            eq(questions.queueId, input.queueId),
+            eq(submissions.userId, userId)
+          )
+        );
+
+      if (queueQuestions.length === 0) {
+        throw new Error("No questions found for this queue");
+      }
+
       const evaluationResults: (typeof evaluations.$inferSelect)[] = [];
       let completedCount = 0;
       let failedCount = 0;
 
-      // For each submission
-      for (const submission of queueSubmissions) {
-        const questionsArray = submission.questions as Array<{
-          data: { id: string; questionText: string; questionType: string };
-        }>;
-        const answersMap = submission.answers as Record<
-          string,
-          { choice?: string; reasoning?: string }
-        >;
+      // For each question × judge assignment
+      for (const { assignment, judge } of assignments) {
+        if (!judge) {
+          continue;
+        }
 
-        // For each assignment (question × judge)
-        for (const { assignment, judge } of assignments) {
-          if (!judge) {
-            continue;
-          }
+        // Find all questions that match this assignment's questionId
+        const matchingQuestions = queueQuestions.filter(
+          (q) => q.question.questionId === assignment.questionId
+        );
 
-          const questionId = assignment.questionId;
-          const question = questionsArray.find((q) => q.data.id === questionId);
-
-          if (!question) {
-            continue;
-          }
-
-          const answer = answersMap[questionId];
-
-          if (!answer) {
-            continue;
-          }
-
+        for (const { question } of matchingQuestions) {
           try {
             // Build the prompt for the AI
-            const prompt = `Question: ${question.data.questionText}
-Question Type: ${question.data.questionType}
+            const prompt = `Question: ${question.questionText}
+Question Type: ${question.questionType}
 
 User's Answer:
-${answer.choice ? `Choice: ${answer.choice}` : ""}
-${answer.reasoning ? `Reasoning: ${answer.reasoning}` : ""}
+${question.answerChoice ? `Choice: ${question.answerChoice}` : ""}
+${question.answerReasoning ? `Reasoning: ${question.answerReasoning}` : ""}
 
 Evaluate this answer according to the rubric provided in the system prompt.`;
 
@@ -131,9 +122,8 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
               .insert(evaluations)
               .values({
                 id: nanoid(),
-                submissionId: submission.id,
+                questionId: question.id, // Now references the questions table
                 judgeId: judge.id,
-                questionId,
                 verdict: result.object.verdict,
                 reasoning: result.object.reasoning,
                 rawResponse: {
@@ -164,9 +154,8 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
             try {
               await db.insert(evaluations).values({
                 id: nanoid(),
-                submissionId: submission.id,
+                questionId: question.id,
                 judgeId: judge.id,
-                questionId,
                 verdict: "inconclusive",
                 reasoning: "Evaluation failed due to an error",
                 rawResponse: { error: true },
@@ -184,7 +173,7 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
 
       return {
         success: true,
-        planned: queueSubmissions.length * assignments.length,
+        planned: queueQuestions.length * assignments.length,
         completed: completedCount,
         failed: failedCount,
         evaluations: evaluationResults,
@@ -209,15 +198,17 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
         throw new Error("User not authenticated");
       }
 
-      // Build query with joins
+      // Build query with joins through questions table
       const results = await db
         .select({
           evaluation: evaluations,
+          question: questions,
           submission: submissions,
           judge: judges,
         })
         .from(evaluations)
-        .leftJoin(submissions, eq(evaluations.submissionId, submissions.id))
+        .leftJoin(questions, eq(evaluations.questionId, questions.id))
+        .leftJoin(submissions, eq(questions.submissionId, submissions.id))
         .leftJoin(judges, eq(evaluations.judgeId, judges.id))
         .where(eq(submissions.userId, userId))
         .orderBy(desc(evaluations.createdAt))
@@ -229,7 +220,7 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
 
       if (input.queueId) {
         filtered = filtered.filter(
-          (r) => r.submission?.queueId === input.queueId
+          (r) => r.question?.queueId === input.queueId
         );
       }
 
@@ -241,7 +232,7 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
 
       if (input.questionIds && input.questionIds.length > 0) {
         filtered = filtered.filter((r) =>
-          input.questionIds?.includes(r.evaluation.questionId)
+          input.questionIds?.includes(r.question?.questionId || "")
         );
       }
 
@@ -273,21 +264,23 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
         throw new Error("User not authenticated");
       }
 
-      // Fetch all evaluations for user
+      // Fetch all evaluations for user through questions table
       const results = await db
         .select({
           evaluation: evaluations,
+          question: questions,
           submission: submissions,
         })
         .from(evaluations)
-        .leftJoin(submissions, eq(evaluations.submissionId, submissions.id))
+        .leftJoin(questions, eq(evaluations.questionId, questions.id))
+        .leftJoin(submissions, eq(questions.submissionId, submissions.id))
         .where(eq(submissions.userId, userId));
 
       // Filter by queueId if provided
       let filtered = results;
       if (input.queueId) {
         filtered = filtered.filter(
-          (r) => r.submission?.queueId === input.queueId
+          (r) => r.question?.queueId === input.queueId
         );
       }
 
@@ -333,11 +326,13 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
       const results = await db
         .select({
           evaluation: evaluations,
+          question: questions,
           submission: submissions,
           judge: judges,
         })
         .from(evaluations)
-        .leftJoin(submissions, eq(evaluations.submissionId, submissions.id))
+        .leftJoin(questions, eq(evaluations.questionId, questions.id))
+        .leftJoin(submissions, eq(questions.submissionId, submissions.id))
         .leftJoin(judges, eq(evaluations.judgeId, judges.id))
         .where(
           and(eq(evaluations.id, input.id), eq(submissions.userId, userId))
