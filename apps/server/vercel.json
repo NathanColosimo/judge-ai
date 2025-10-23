@@ -1,0 +1,7 @@
+{
+  "installCommand": "npm -C ../.. ci || npm ci",
+  "buildCommand": "npm -C ../.. run build || npm run build",
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
