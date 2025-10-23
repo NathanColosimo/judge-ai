@@ -42,8 +42,26 @@ export const submissionsRouter = {
       }
 
       const insertedSubmissions: (typeof submissions.$inferSelect)[] = [];
+      const duplicateIds: string[] = [];
 
       for (const submission of input) {
+        // Check if submission already exists
+        const existing = await db
+          .select()
+          .from(submissions)
+          .where(
+            and(
+              eq(submissions.id, submission.id),
+              eq(submissions.userId, userId)
+            )
+          )
+          .limit(1);
+
+        if (existing.length > 0) {
+          duplicateIds.push(submission.id);
+          continue; // Skip duplicate
+        }
+
         // Insert submission
         const [insertedSubmission] = await db
           .insert(submissions)
@@ -85,6 +103,13 @@ export const submissionsRouter = {
             await db.insert(questions).values(questionInserts);
           }
         }
+      }
+
+      // Return error if any duplicates found
+      if (duplicateIds.length > 0) {
+        throw new Error(
+          `Duplicate submission IDs found: ${duplicateIds.join(", ")}. These submissions already exist and were skipped.`
+        );
       }
 
       return {

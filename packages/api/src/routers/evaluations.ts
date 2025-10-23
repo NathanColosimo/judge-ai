@@ -6,17 +6,20 @@ import {
   queueJudgeAssignments,
   submissions,
 } from "@judge-ai/db";
-import { gateway, generateObject } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { generateObject } from "ai";
 import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { protectedProcedure } from "../index";
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
 const PASS_RATE_PRECISION = 2;
 const MIN_REASONING_LENGTH = 10;
 const MAX_REASONING_LENGTH = 500;
+
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
 
 // Evaluation schema for structured output
 const evaluationSchema = z.object({
@@ -56,9 +59,6 @@ export const evaluationsRouter = {
       }
 
       // Fetch all questions for this queue that match assigned question IDs
-      const assignedQuestionIds = assignments.map(
-        (a) => a.assignment.questionId
-      );
       const queueQuestions = await db
         .select({
           question: questions,
@@ -109,7 +109,7 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
 
             // Call AI SDK to generate structured evaluation
             const result = await generateObject({
-              model: gateway(judge.modelName),
+              model: openrouter(judge.modelName),
               system: judge.systemPrompt,
               prompt,
               schema: evaluationSchema,
@@ -152,20 +152,25 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
 
             // Store failed evaluation with error details
             try {
-              await db.insert(evaluations).values({
-                id: nanoid(),
-                questionId: question.id,
-                judgeId: judge.id,
-                verdict: "inconclusive",
-                reasoning: "Evaluation failed due to an error",
-                rawResponse: { error: true },
-                tokensUsed: 0,
-                latencyMs: 0,
-                error: error instanceof Error ? error.message : "Unknown error",
-                createdAt: new Date(),
-              });
-            } catch {
-              // If we can't even log the error, just continue
+              await db
+                .insert(evaluations)
+                .values({
+                  id: nanoid(),
+                  questionId: question.id,
+                  judgeId: judge.id,
+                  verdict: "inconclusive",
+                  reasoning:
+                    error instanceof Error ? error.message : "Unknown error",
+                  rawResponse: { error: true },
+                  tokensUsed: 0,
+                  latencyMs: 0,
+                  error:
+                    error instanceof Error ? error.message : "Unknown error",
+                  createdAt: new Date(),
+                })
+                .returning();
+            } catch (secondaryError) {
+              console.error(secondaryError);
             }
           }
         }
@@ -188,8 +193,6 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
         judgeIds: z.array(z.string()).optional(),
         questionIds: z.array(z.string()).optional(),
         verdicts: z.array(z.enum(["pass", "fail", "inconclusive"])).optional(),
-        limit: z.number().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
-        offset: z.number().min(0).default(0),
       })
     )
     .handler(async ({ input, context }) => {
@@ -211,9 +214,7 @@ Evaluate this answer according to the rubric provided in the system prompt.`;
         .leftJoin(submissions, eq(questions.submissionId, submissions.id))
         .leftJoin(judges, eq(evaluations.judgeId, judges.id))
         .where(eq(submissions.userId, userId))
-        .orderBy(desc(evaluations.createdAt))
-        .limit(input.limit)
-        .offset(input.offset);
+        .orderBy(desc(evaluations.createdAt));
 
       // Filter results
       let filtered = results;

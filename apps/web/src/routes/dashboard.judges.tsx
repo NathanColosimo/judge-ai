@@ -43,14 +43,14 @@ const AVAILABLE_MODELS = [
   "google/gemini-2.5-flash-preview-09-2025",
   "anthropic/claude-haiku-4.5",
   "openai/gpt-5-mini",
-  "xai/grok-4-fast-reasoning",
+  "xai/grok-4-fast",
 ] as const;
 
 const MODEL_DISPLAY_NAMES: Record<(typeof AVAILABLE_MODELS)[number], string> = {
   "google/gemini-2.5-flash-preview-09-2025": "Google Gemini 2.5 Flash",
   "anthropic/claude-haiku-4.5": "Anthropic Claude Haiku 4.5",
   "openai/gpt-5-mini": "OpenAI GPT-5 Mini",
-  "xai/grok-4-fast-reasoning": "xAI Grok 4 Fast Reasoning",
+  "xai/grok-4-fast": "xAI Grok 4 Fast",
 };
 
 // Constants for validation

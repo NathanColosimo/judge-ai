@@ -86,24 +86,24 @@ function QueueDetail() {
     enabled: !!session && !!queueId,
   });
 
+  // Determine if evaluations exist (check assignments first)
+  const hasAssignments = (assignmentsQuery.data?.assignments.length || 0) > 0;
+
   // Fetch evaluations for this queue
   const evaluationsQuery = useQuery({
     ...orpc.evaluations.list.queryOptions({
-      input: {
-        ...(queueId ? { queueId } : {}),
-        limit: 1000,
-        offset: 0,
-      },
+      input: { queueId: queueId || "" },
     }),
     enabled: !!session && !!queueId,
   });
 
-  // Fetch evaluation stats
+  // Fetch evaluation stats (only if evaluations exist)
+  const hasEvaluations = (evaluationsQuery.data?.evaluations.length || 0) > 0;
   const statsQuery = useQuery({
     ...orpc.evaluations.stats.queryOptions({
       input: { queueId: queueId as string },
     }),
-    enabled: !!session && !!queueId,
+    enabled: !!session && !!queueId && hasEvaluations,
   });
 
   // Fetch all judges for assignment
@@ -166,9 +166,7 @@ function QueueDetail() {
       questionType: q.questionType,
     })) || [];
 
-  // Determine queue status
-  const hasAssignments = (assignmentsQuery.data?.assignments.length || 0) > 0;
-  const hasEvaluations = (evaluationsQuery.data?.evaluations.length || 0) > 0;
+  // Determine queue status (already computed above)
   const queueStatus = determineQueueStatus(hasEvaluations, isRunning);
 
   // Handle assignment changes
