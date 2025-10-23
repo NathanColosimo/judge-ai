@@ -51,7 +51,8 @@ const rpcHandler = new RPCHandler(appRouter, {
 app.use("/*", async (c, next) => {
   const context = await createContext({ context: c });
 
-  for (const prefix of ["/rpc", "/api/rpc"]) {
+  const rpcPrefixes = ["/rpc", "/api/rpc"] as const;
+  for (const prefix of rpcPrefixes) {
     const rpcResult = await rpcHandler.handle(c.req.raw, {
       prefix,
       context,
@@ -61,7 +62,8 @@ app.use("/*", async (c, next) => {
     }
   }
 
-  for (const prefix of ["/api-reference", "/api/api-reference"]) {
+  const apiPrefixes = ["/api-reference", "/api/api-reference"] as const;
+  for (const prefix of apiPrefixes) {
     const apiResult = await apiHandler.handle(c.req.raw, {
       prefix,
       context,
