@@ -18,7 +18,7 @@ const TITLE_TEXT = `
     ╚═╝       ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
  `;
 
-export function meta({}: Route.MetaArgs) {
+export function meta(_: Route.MetaArgs) {
   return [
     { title: "judge-ai" },
     { name: "description", content: "judge-ai is a web application" },
@@ -41,11 +41,7 @@ export default function Home() {
               }`}
             />
             <span className="text-muted-foreground text-sm">
-              {healthCheck.isLoading
-                ? "Checking..."
-                : healthCheck.data
-                  ? "Connected"
-                  : "Disconnected"}
+              {healthCheck.data ? "Connected" : "Disconnected"}
             </span>
           </div>
         </section>
