@@ -11,7 +11,6 @@ import "./index.css";
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import Header from "./components/header";
 import { ThemeProvider } from "./components/theme-provider";
 import { Toaster } from "./components/ui/sonner";
 import { queryClient } from "./utils/orpc";
@@ -56,10 +55,7 @@ export default function App() {
         storageKey="vite-ui-theme"
       >
         <Meta />
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
+        <Outlet />
         <Toaster richColors />
       </ThemeProvider>
       <ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />
