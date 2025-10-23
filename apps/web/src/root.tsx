@@ -35,7 +35,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 			<head>
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
-				<Meta />
 				<Links />
 			</head>
 			<body>
@@ -56,6 +55,7 @@ export default function App() {
 				disableTransitionOnChange
 				storageKey="vite-ui-theme"
 			>
+				<Meta />
 				<div className="grid grid-rows-[auto_1fr] h-svh">
 					<Header />
 					<Outlet />

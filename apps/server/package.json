@@ -20,7 +20,8 @@
     "zod": "^4.1.11",
     "@judge-ai/api": "*",
     "@judge-ai/auth": "*",
-    "@judge-ai/db": "*"
+    "@judge-ai/db": "*",
+    "drizzle-orm": "^0.44.2"
   },
   "trustedDependencies": [
     "supabase"
