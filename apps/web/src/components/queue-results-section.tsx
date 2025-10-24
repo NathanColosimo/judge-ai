@@ -1,5 +1,25 @@
-import { AlertCircle, CheckCircle2, ChevronDown, XCircle } from "lucide-react";
-import { useState } from "react";
+import type {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+  VisibilityState,
+} from "@tanstack/react-table";
+import {
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  Filter,
+  XCircle,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +29,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
+import { DataTablePagination } from "@/components/ui/data-table-pagination";
+import { DataTableViewOptions } from "@/components/ui/data-table-view-options";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -181,53 +212,6 @@ function EvaluationDetails({ item }: { item: EvaluationItem }) {
   );
 }
 
-// Component for a single expandable evaluation row
-function EvaluationRow({ item }: { item: EvaluationItem }) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <>
-      <TableRow className="group">
-        <TableCell>
-          <Button
-            className="h-8 w-8 p-0"
-            onClick={() => setIsOpen(!isOpen)}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
-            />
-          </Button>
-        </TableCell>
-        <TableCell className="font-mono text-sm">
-          {item.question?.submissionId.slice(0, SUBMISSIONS_TRUNCATE_LENGTH) ||
-            "N/A"}
-          ...
-        </TableCell>
-        <TableCell className="max-w-xs truncate">
-          {item.question?.questionText || "Unknown"}
-        </TableCell>
-        <TableCell>{item.judge?.name || "Unknown"}</TableCell>
-        <TableCell>
-          <VerdictBadge verdict={item.evaluation.verdict} />
-        </TableCell>
-        <TableCell className="max-w-md">
-          <p className="truncate text-sm">{item.evaluation.reasoning}</p>
-        </TableCell>
-      </TableRow>
-      {isOpen && (
-        <TableRow>
-          <TableCell className="p-0" colSpan={6}>
-            <EvaluationDetails item={item} />
-          </TableCell>
-        </TableRow>
-      )}
-    </>
-  );
-}
-
 export function ResultsSection({
   stats,
   evaluations,
@@ -240,6 +224,183 @@ export function ResultsSection({
   };
   evaluations: EvaluationItem[];
 }) {
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  // Get unique judges and questions for filters
+  const uniqueJudges = useMemo(() => {
+    const judges = new Set<string>();
+    for (const item of evaluations) {
+      if (item.judge?.name) {
+        judges.add(item.judge.name);
+      }
+    }
+    return Array.from(judges);
+  }, [evaluations]);
+
+  const uniqueQuestions = useMemo(() => {
+    const questions = new Set<string>();
+    for (const item of evaluations) {
+      if (item.question?.questionText) {
+        questions.add(item.question.questionText);
+      }
+    }
+    return Array.from(questions);
+  }, [evaluations]);
+
+  // Toggle row expansion
+  const toggleRow = (id: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  // Define columns
+  const columns: ColumnDef<EvaluationItem>[] = [
+    {
+      id: "expand",
+      cell: ({ row }) => (
+        <Button
+          className="h-8 w-8 p-0"
+          onClick={() => toggleRow(row.original.evaluation.id)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${
+              expandedRows.has(row.original.evaluation.id) ? "rotate-180" : ""
+            }`}
+          />
+        </Button>
+      ),
+      enableHiding: false,
+    },
+    {
+      accessorKey: "question.submissionId",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Submission" />
+      ),
+      cell: ({ row }) => (
+        <span className="font-mono text-sm">
+          {row.original.question?.submissionId.slice(
+            0,
+            SUBMISSIONS_TRUNCATE_LENGTH
+          ) || "N/A"}
+          ...
+        </span>
+      ),
+      filterFn: (row, _id, value) => {
+        const submissionId = row.original.question?.submissionId || "";
+        return submissionId.includes(value);
+      },
+    },
+    {
+      id: "question",
+      accessorFn: (row) => row.question?.questionText,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Question" />
+      ),
+      cell: ({ row }) => (
+        <div className="max-w-xs truncate">
+          {row.original.question?.questionText || "Unknown"}
+        </div>
+      ),
+      filterFn: (row, _id, value: string[]) => {
+        if (!value || value.length === 0) {
+          return true;
+        }
+        return value.includes(row.original.question?.questionText || "");
+      },
+    },
+    {
+      id: "judge",
+      accessorFn: (row) => row.judge?.name,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Judge" />
+      ),
+      cell: ({ row }) => row.original.judge?.name || "Unknown",
+      filterFn: (row, _id, value: string[]) => {
+        if (!value || value.length === 0) {
+          return true;
+        }
+        return value.includes(row.original.judge?.name || "");
+      },
+    },
+    {
+      id: "verdict",
+      accessorFn: (row) => row.evaluation.verdict,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Verdict" />
+      ),
+      cell: ({ row }) => (
+        <VerdictBadge verdict={row.original.evaluation.verdict} />
+      ),
+      filterFn: (row, _id, value: string[]) => {
+        if (!value || value.length === 0) {
+          return true;
+        }
+        return value.includes(row.original.evaluation.verdict);
+      },
+    },
+    {
+      accessorKey: "evaluation.reasoning",
+      header: "Reasoning",
+      cell: ({ row }) => (
+        <div className="max-w-md">
+          <p className="truncate text-sm">
+            {row.original.evaluation.reasoning}
+          </p>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "evaluation.createdAt",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Created" />
+      ),
+      cell: ({ row }) =>
+        new Date(row.original.evaluation.createdAt).toLocaleDateString(),
+      enableColumnFilter: false,
+    },
+  ];
+
+  const table = useReactTable({
+    data: evaluations,
+    columns,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
+    state: {
+      sorting,
+      columnFilters,
+      columnVisibility,
+    },
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+  });
+
+  // Get current filter values from table state
+  const judgeFilter =
+    (table.getColumn("judge")?.getFilterValue() as string[]) || [];
+  const questionFilter =
+    (table.getColumn("question")?.getFilterValue() as string[]) || [];
+  const verdictFilter =
+    (table.getColumn("verdict")?.getFilterValue() as string[]) || [];
+
   return (
     <>
       <Card>
@@ -290,24 +451,213 @@ export function ResultsSection({
           )}
 
           {evaluations.length > 0 && (
-            <div className="overflow-x-auto">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12" />
-                    <TableHead className="w-32">Submission</TableHead>
-                    <TableHead className="w-48">Question</TableHead>
-                    <TableHead className="w-32">Judge</TableHead>
-                    <TableHead className="w-28">Verdict</TableHead>
-                    <TableHead>Reasoning</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {evaluations.map((item) => (
-                    <EvaluationRow item={item} key={item.evaluation.id} />
-                  ))}
-                </TableBody>
-              </Table>
+            <div className="space-y-4">
+              {/* Filters */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Judge Filter */}
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" type="button" variant="outline">
+                      <Filter className="mr-2 h-4 w-4" />
+                      Judge
+                      {judgeFilter.length > 0 && (
+                        <Badge className="ml-2" variant="secondary">
+                          {judgeFilter.length}
+                        </Badge>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[200px]">
+                    <DropdownMenuLabel>Filter by Judge</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {uniqueJudges.map((judge) => (
+                      <DropdownMenuCheckboxItem
+                        checked={judgeFilter.includes(judge)}
+                        key={judge}
+                        onCheckedChange={(checked) => {
+                          const newFilter = checked
+                            ? [...judgeFilter, judge]
+                            : judgeFilter.filter((j) => j !== judge);
+                          table
+                            .getColumn("judge")
+                            ?.setFilterValue(
+                              newFilter.length > 0 ? newFilter : undefined
+                            );
+                        }}
+                        onSelect={(e) => e.preventDefault()}
+                      >
+                        {judge}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Question Filter */}
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" type="button" variant="outline">
+                      <Filter className="mr-2 h-4 w-4" />
+                      Question
+                      {questionFilter.length > 0 && (
+                        <Badge className="ml-2" variant="secondary">
+                          {questionFilter.length}
+                        </Badge>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[250px]">
+                    <DropdownMenuLabel>Filter by Question</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {uniqueQuestions.map((question) => (
+                        <DropdownMenuCheckboxItem
+                          checked={questionFilter.includes(question)}
+                          key={question}
+                          onCheckedChange={(checked) => {
+                            const newFilter = checked
+                              ? [...questionFilter, question]
+                              : questionFilter.filter((q) => q !== question);
+                            table
+                              .getColumn("question")
+                              ?.setFilterValue(
+                                newFilter.length > 0 ? newFilter : undefined
+                              );
+                          }}
+                          onSelect={(e) => e.preventDefault()}
+                        >
+                          <span className="truncate">{question}</span>
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Verdict Filter */}
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" type="button" variant="outline">
+                      <Filter className="mr-2 h-4 w-4" />
+                      Verdict
+                      {verdictFilter.length > 0 && (
+                        <Badge className="ml-2" variant="secondary">
+                          {verdictFilter.length}
+                        </Badge>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[150px]">
+                    <DropdownMenuLabel>Filter by Verdict</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {["pass", "fail", "inconclusive"].map((verdict) => (
+                      <DropdownMenuCheckboxItem
+                        checked={verdictFilter.includes(verdict)}
+                        key={verdict}
+                        onCheckedChange={(checked) => {
+                          const newFilter = checked
+                            ? [...verdictFilter, verdict]
+                            : verdictFilter.filter((v) => v !== verdict);
+                          table
+                            .getColumn("verdict")
+                            ?.setFilterValue(
+                              newFilter.length > 0 ? newFilter : undefined
+                            );
+                        }}
+                        onSelect={(e) => e.preventDefault()}
+                      >
+                        {verdict.charAt(0).toUpperCase() + verdict.slice(1)}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Clear Filters */}
+                {(judgeFilter.length > 0 ||
+                  questionFilter.length > 0 ||
+                  verdictFilter.length > 0) && (
+                  <Button
+                    onClick={() => setColumnFilters([])}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Clear filters
+                  </Button>
+                )}
+
+                <div className="ml-auto">
+                  <DataTableViewOptions table={table} />
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-hidden rounded-md border">
+                <Table>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows?.length > 0 ? (
+                      table.getRowModel().rows.map((row) => {
+                        const isExpanded = expandedRows.has(
+                          row.original.evaluation.id
+                        );
+                        return (
+                          <>
+                            <TableRow
+                              data-state={row.getIsSelected() && "selected"}
+                              key={row.id}
+                            >
+                              {row.getVisibleCells().map((cell) => (
+                                <TableCell key={cell.id}>
+                                  {flexRender(
+                                    cell.column.columnDef.cell,
+                                    cell.getContext()
+                                  )}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                            {isExpanded && (
+                              <TableRow key={`${row.id}-expanded`}>
+                                <TableCell
+                                  className="p-0"
+                                  colSpan={columns.length}
+                                >
+                                  <EvaluationDetails item={row.original} />
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          className="h-24 text-center"
+                          colSpan={columns.length}
+                        >
+                          No results.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              <DataTablePagination table={table} />
             </div>
           )}
         </CardContent>

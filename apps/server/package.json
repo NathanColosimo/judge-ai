@@ -3,7 +3,7 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "build": "npm run db:migrate && tsdown",
+    "build": "tsdown",
     "check-types": "tsc -b",
     "db:migrate": "npm run db:migrate --workspace=@judge-ai/db",
     "dev": "tsx watch src/server.ts",
