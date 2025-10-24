@@ -79,7 +79,7 @@ export const submissionsRouter = {
           insertedSubmissions.push(insertedSubmission);
 
           // Insert questions with answers
-          const questionInserts = [];
+          const questionInserts: (typeof questions.$inferInsert)[] = [];
           for (const questionObj of submission.questions) {
             const questionId = questionObj.data.id;
             const answer = submission.answers[questionId];

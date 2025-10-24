@@ -17,6 +17,3 @@ const requireAuth = o.middleware(({ context, next }) => {
 });
 
 export const protectedProcedure = publicProcedure.use(requireAuth);
-
-// Export constants
-export { AVAILABLE_MODELS, MODEL_DISPLAY_NAMES } from "./constants/models";

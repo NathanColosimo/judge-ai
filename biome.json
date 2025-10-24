@@ -19,7 +19,9 @@
       "!**/.alchemy",
       "!**/.svelte-kit",
       "!**/wrangler.jsonc",
-      "!**/.source"
+      "!**/.source",
+      "!**/components/ui",
+      "!**/components/kibo-ui"
     ]
   },
   "extends": ["ultracite"]

@@ -37,21 +37,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { authClient } from "@/lib/auth-client";
 import { orpc, queryClient } from "@/utils/orpc";
-
-// Import available models from API package
-const AVAILABLE_MODELS = [
-  "google/gemini-2.5-flash-preview-09-2025",
-  "anthropic/claude-haiku-4.5",
-  "openai/gpt-5-mini",
-  "xai/grok-4-fast",
-] as const;
-
-const MODEL_DISPLAY_NAMES: Record<(typeof AVAILABLE_MODELS)[number], string> = {
-  "google/gemini-2.5-flash-preview-09-2025": "Google Gemini 2.5 Flash",
-  "anthropic/claude-haiku-4.5": "Anthropic Claude Haiku 4.5",
-  "openai/gpt-5-mini": "OpenAI GPT-5 Mini",
-  "xai/grok-4-fast": "xAI Grok 4 Fast",
-};
+import { AVAILABLE_MODELS, MODEL_DISPLAY_NAMES } from "@judge-ai/api/constants/models";
 
 // Constants for validation
 const MIN_NAME_LENGTH = 1;
