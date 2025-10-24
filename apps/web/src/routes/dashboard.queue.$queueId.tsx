@@ -3,7 +3,6 @@ import { CheckCircle2, Loader2, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import type { EvaluationItem } from "@/components/evaluation-data-table";
 import { AssignmentSection } from "@/components/queue-assignment-section";
 import { ResultsSection } from "@/components/queue-results-section";
 import { Badge } from "@/components/ui/badge";
@@ -113,35 +112,7 @@ function QueueDetailContent({ queueId }: { queueId: string }) {
     ...orpc.judges.list.queryOptions({ input: {} }),
   });
 
-  const assignMutation = useMutation({
-    mutationFn: (data: {
-      queueId: string;
-      questionId: string;
-      judgeIds: string[];
-    }) => orpc.assignments.assign.call(data),
-    onSuccess: () => {
-      toast.success("Judges assigned successfully");
-      queryClient.invalidateQueries();
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to assign judges: ${error.message}`);
-    },
-  });
-
-  const unassignMutation = useMutation({
-    mutationFn: (data: {
-      queueId: string;
-      questionId: string;
-      judgeId: string;
-    }) => orpc.assignments.unassignJudgeFromQuestion.call(data),
-    onSuccess: () => {
-      toast.success("Judge unassigned");
-      queryClient.invalidateQueries();
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to unassign judge: ${error.message}`);
-    },
-  });
+  // Assignment mutations are managed inside AssignmentSection now
 
   const runEvaluationsMutation = useMutation({
     mutationFn: (data: { queueId: string }) => orpc.evaluations.run.call(data),
@@ -167,17 +138,7 @@ function QueueDetailContent({ queueId }: { queueId: string }) {
 
   const queueStatus = determineQueueStatus(hasEvaluations, isRunning);
 
-  const handleToggleAssignment = (
-    questionId: string,
-    judgeId: string,
-    isAssigned: boolean
-  ) => {
-    if (isAssigned) {
-      unassignMutation.mutate({ queueId, questionId, judgeId });
-    } else {
-      assignMutation.mutate({ queueId, questionId, judgeIds: [judgeId] });
-    }
-  };
+  // Assignment handlers are managed inside AssignmentSection now
 
   const handleRunEvaluations = () => {
     if (!hasAssignments) {
@@ -236,23 +197,21 @@ function QueueDetailContent({ queueId }: { queueId: string }) {
 
         {!isLoading && queueStatus === "prep" && (
           <PrepSection
-            assignIsPending={assignMutation.isPending}
             hasAssignments={hasAssignments}
             isJudgeAssigned={isJudgeAssigned}
             judges={judgesQuery.data?.judges.filter((j) => j.isActive) || []}
             onRun={handleRunEvaluations}
-            onToggleAssignment={handleToggleAssignment}
             plannedEvaluations={plannedEvaluations}
             questions={questions}
+            queueId={queueId}
             runIsPending={runEvaluationsMutation.isPending}
-            unassignIsPending={unassignMutation.isPending}
           />
         )}
 
         {queueStatus === "processing" && <ProcessingSection />}
 
         {queueStatus === "done" && (
-          <DoneSection
+          <ResultsSection
             evaluations={evaluationsQuery.data?.evaluations || []}
             stats={{
               total: statsQuery.data?.total || 0,
@@ -261,6 +220,7 @@ function QueueDetailContent({ queueId }: { queueId: string }) {
               failCount: statsQuery.data?.failCount || 0,
             }}
           />
+          
         )}
       </div>
     </>
@@ -318,17 +278,16 @@ function LoadingCard() {
 }
 
 function PrepSection({
+  queueId,
   questions,
   judges,
   isJudgeAssigned,
-  onToggleAssignment,
   hasAssignments,
   plannedEvaluations,
   onRun,
   runIsPending,
-  assignIsPending,
-  unassignIsPending,
 }: {
+  queueId: string;
   questions: Array<{ id: string; questionText: string; questionType: string }>;
   judges: Array<{
     id: string;
@@ -337,19 +296,11 @@ function PrepSection({
     modelName: string;
   }>;
   isJudgeAssigned: (questionId: string, judgeId: string) => boolean;
-  onToggleAssignment: (
-    questionId: string,
-    judgeId: string,
-    isAssigned: boolean
-  ) => void;
   hasAssignments: boolean;
   plannedEvaluations: number;
   onRun: () => void;
   runIsPending: boolean;
-  assignIsPending: boolean;
-  unassignIsPending: boolean;
 }) {
-  const isDisabled = assignIsPending || unassignIsPending;
   return (
     <>
       <Card>
@@ -361,11 +312,10 @@ function PrepSection({
         </CardHeader>
         <CardContent>
           <AssignmentSection
-            isDisabled={isDisabled}
             isJudgeAssigned={isJudgeAssigned}
             judges={judges}
-            onToggleAssignment={onToggleAssignment}
             questions={questions}
+            queueId={queueId}
           />
         </CardContent>
       </Card>
@@ -413,19 +363,4 @@ function ProcessingSection() {
       </CardContent>
     </Card>
   );
-}
-
-function DoneSection({
-  evaluations,
-  stats,
-}: {
-  evaluations: EvaluationItem[];
-  stats: {
-    total: number;
-    passRate: number;
-    passCount: number;
-    failCount: number;
-  };
-}) {
-  return <ResultsSection evaluations={evaluations} stats={stats} />;
 }
