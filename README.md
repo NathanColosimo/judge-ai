@@ -2,25 +2,33 @@
 
 **Time spent**: ~6-8 hours
 
-**Tradeoffs**:
-- Accuracy vs. cost & time: 
+**Tradeoffs:**
+- **Accuracy vs. cost & time:**
     - I used smaller models to reduce cost and have faster evals, but accuracy is probably lower. 
     - Additionally, running each question + judge combination multiple times gets you a more accurate eval as you'll have more data. If you run a question 10 times instead of once you'll have a better idea of the models confidence. 
     - Simply having a "confidence" field isn't actually reliable, a better indicator would be seeing "oh this judge passes this answer on this question 9/10 times"
     - I just ran each question + judge once to save costs and time.
-- Client side vs server side on UI stuff:
+- **Client side vs server side on UI stuff:**
     - I did a lot of the sorting / graph calculations client side. This is faster to implement but less scalable, when you get to have thousands or potentially tens of thousands of evals eventually it won't be feasible to calculate stats client side, much more efficient to offload that to SQL, but that takes longer to develop.
-- Data model:
+- **Data model:**
     - I don't have a ton of different data models in DB, its not super finegrained. I just have submissions, questions, judges, question-judge assignments, and eval results. That's partly because the significance of each wasn't super clear, but also because that would take longer dev time. 
-- Synchronous batch runs vs background job / queue:
+- **Synchronous batch runs vs background job / queue:**
     - Since I was using openrouter, and also because I am assuming the question set isn't that large (I run 10 question evals concurrently until I get through everything, with more credits in openrouter you can scale to much higher rate limits)
     - I just kick off a single endpoint / api call to run all the evals for a particular queue. 
     - If the set of evals got larger, where there was hundreds or thousands of evals to run, I would queue everything up in background jobs / processing to prevent running into function duration(if serverless) + memory limits. 
     - doing this synchronously saves dev time
 
-
-
-**Extra features**:
+**Extra features beyond spec**:
+- Actual deployment
+    - Deployed to judge-ai.nathancolosimo.com
+    - because of this, I have extra parts of my app that wouldn't be present if I was just doing a demo.
+- Backend
+    - Since vite was required, I needed a backend so I decided on Hono + oRPC, and deployed that to vercel with the react app too. 
+- Auth:
+    - I implemented simple email + password sign in via better auth.
+    - This lets me separate judges / submissions etc. by userID so other judges and questions aren't accessible by other people!
+    - With more time + in a more B2B style app (this app probably would be) I would have implemented "Organizations" instead of just users, and then all users of that org would have access to that organizations resources. 
+- A few charts + stats on the queue results page
 
 ## Stack
 
