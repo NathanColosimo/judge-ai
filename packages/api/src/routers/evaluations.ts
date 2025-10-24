@@ -158,6 +158,10 @@ function buildEvaluationTasks(
     if (judge.userId !== userId) {
       continue;
     }
+    // Skip judges that are currently inactive to avoid running evaluations unintentionally
+    if (!judge.isActive) {
+      continue;
+    }
     if (!allowedModels.has(judge.modelName)) {
       continue;
     }

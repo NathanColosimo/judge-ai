@@ -239,7 +239,7 @@ function QueueDetailContent({ queueId }: { queueId: string }) {
             assignIsPending={assignMutation.isPending}
             hasAssignments={hasAssignments}
             isJudgeAssigned={isJudgeAssigned}
-            judges={judgesQuery.data?.judges || []}
+            judges={judgesQuery.data?.judges.filter((j) => j.isActive) || []}
             onRun={handleRunEvaluations}
             onToggleAssignment={handleToggleAssignment}
             plannedEvaluations={plannedEvaluations}
