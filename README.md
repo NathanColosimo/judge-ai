@@ -1,15 +1,34 @@
 # judge-ai
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, React Router, Hono, ORPC, and more.
+**Time spent**: ~6-8 hours
 
-## Features
+**Tradeoffs**:
+- Accuracy vs. cost & time: 
+    - I used smaller models to reduce cost and have faster evals, but accuracy is probably lower. 
+    - Additionally, running each question + judge combination multiple times gets you a more accurate eval as you'll have more data. If you run a question 10 times instead of once you'll have a better idea of the models confidence. 
+    - Simply having a "confidence" field isn't actually reliable, a better indicator would be seeing "oh this judge passes this answer on this question 9/10 times"
+    - I just ran each question + judge once to save costs and time.
+- Client side vs server side on UI stuff:
+    - I did a lot of the sorting / graph calculations client side. This is faster to implement but less scalable, when you get to have thousands or potentially tens of thousands of evals eventually it won't be feasible to calculate stats client side, much more efficient to offload that to SQL, but that takes longer to develop.
+- Data model:
+    - I don't have a ton of different data models in DB, its not super finegrained. I just have submissions, questions, judges, question-judge assignments, and eval results. That's partly because the significance of each wasn't super clear, but also because that would take longer dev time. 
+- Synchronous batch runs vs background job / queue:
+    - Since I was using openrouter, and also because I am assuming the question set isn't that large (I run 10 question evals concurrently until I get through everything, with more credits in openrouter you can scale to much higher rate limits)
+    - I just kick off a single endpoint / api call to run all the evals for a particular queue. 
+    - If the set of evals got larger, where there was hundreds or thousands of evals to run, I would queue everything up in background jobs / processing to prevent running into function duration(if serverless) + memory limits. 
+    - doing this synchronously saves dev time
 
-- **TypeScript** - For type safety and improved developer experience
-- **React Router** - Declarative routing for React
-- **TailwindCSS** - Utility-first CSS for rapid UI development
+
+
+**Extra features**:
+
+## Stack
+
+- **React Router** 
+- **TailwindCSS**
 - **shadcn/ui** - Reusable UI components
 - **Hono** - Lightweight, performant server framework
-- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
+- **oRPC** - End-to-end type-safe APIs
 - **Node.js** - Runtime environment
 - **Drizzle** - TypeScript-first ORM
 - **PostgreSQL** - Database engine
@@ -21,18 +40,21 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 First, install the dependencies:
 
 ```bash
-npm install
+npm install && npm run build
 ```
 ## Database Setup
 
 This project uses PostgreSQL with Drizzle ORM.
 
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
+1. Make sure you have a PostgreSQL database set up. (Recommended: `supabase start` in judge-ai directory)
+2. Add `apps/server/.env` and `apps/web/.env` for development. Copy .env.example and fill in the blanks:
+3. Update your `apps/server/.env` file with your PostgreSQL connection details. 
+4. Set BETTER_AUTH_SECRET - recommended `openssl rand -base64 32`
+5. Set OPENROUTER_API_KEY - create an openrouter account if you don't already.
 
-3. Apply the schema to your database:
+6. Apply the schema to your database:
 ```bash
-npm run db:push
+npm run db:migrate
 ```
 
 
@@ -68,8 +90,5 @@ judge-ai/
 
 - `npm run dev`: Start all applications in development mode
 - `npm run build`: Build all applications
-- `npm run dev:web`: Start only the web application
-- `npm run dev:server`: Start only the server
-- `npm run check-types`: Check TypeScript types across all apps
-- `npm run db:push`: Push schema changes to database
+- `npm run db:migrate`: Migrate schema changes to database
 - `npm run db:studio`: Open database studio UI
