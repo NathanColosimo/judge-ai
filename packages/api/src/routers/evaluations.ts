@@ -135,15 +135,17 @@ function fetchQueueQuestions(queueId: string, userId: string) {
     .where(and(eq(questions.queueId, queueId), eq(submissions.userId, userId)));
 }
 
-// Helper function to build evaluation promises
-function buildEvaluationPromises(
+// Helper function to build evaluation tasks (for concurrency control)
+function buildEvaluationTasks(
   assignments: Awaited<ReturnType<typeof fetchQueueAssignments>>,
   queueQuestions: Awaited<ReturnType<typeof fetchQueueQuestions>>
 ) {
-  const evaluationPromises: Promise<{
-    success: boolean;
-    evaluation?: typeof evaluations.$inferSelect;
-  }>[] = [];
+  const tasks: Array<
+    () => Promise<{
+      success: boolean;
+      evaluation?: typeof evaluations.$inferSelect;
+    }>
+  > = [];
 
   for (const { assignment, judge } of assignments) {
     if (!judge) {
@@ -155,11 +157,44 @@ function buildEvaluationPromises(
     );
 
     for (const { question } of matchingQuestions) {
-      evaluationPromises.push(runSingleEvaluation(question, judge));
+      tasks.push(() => runSingleEvaluation(question, judge));
     }
   }
 
-  return evaluationPromises;
+  return tasks;
+}
+
+// Run tasks with a fixed concurrency limit and return PromiseSettledResult list
+async function runWithConcurrencyLimit<T>(
+  tasks: Array<() => Promise<T>>,
+  limit: number
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const current = nextIndex;
+      if (current >= tasks.length) {
+        break;
+      }
+      nextIndex += 1;
+      try {
+        const task = tasks[current];
+        if (!task) {
+          continue;
+        }
+        const value = await task();
+        results[current] = { status: "fulfilled", value } as const;
+      } catch (reason) {
+        results[current] = { status: "rejected", reason } as const;
+      }
+    }
+  }
+
+  const workerCount = Math.min(limit, tasks.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 // Helper function to process evaluation results
@@ -211,12 +246,11 @@ export const evaluationsRouter = {
         throw new Error("No questions found for this queue");
       }
 
-      // Build and run all evaluation promises in parallel
-      const evaluationPromises = buildEvaluationPromises(
-        assignments,
-        queueQuestions
-      );
-      const results = await Promise.allSettled(evaluationPromises);
+      // Build evaluation tasks and run with concurrency limit
+      const CONCURRENCY_LIMIT = 10;
+      const tasks = buildEvaluationTasks(assignments, queueQuestions);
+      const plannedCount = tasks.length;
+      const results = await runWithConcurrencyLimit(tasks, CONCURRENCY_LIMIT);
 
       // Process results
       const { evaluationResults, completedCount, failedCount } =
@@ -224,7 +258,7 @@ export const evaluationsRouter = {
 
       return {
         success: true,
-        planned: queueQuestions.length * assignments.length,
+        planned: plannedCount,
         completed: completedCount,
         failed: failedCount,
         evaluations: evaluationResults,
