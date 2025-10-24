@@ -145,7 +145,7 @@ export function ResultsSection({
       </Card>
 
       {/* Charts Section - Grid for multiple charts */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <JudgePassRateChart data={judgePassRateData} />
         <VerdictDistributionChart
           data={verdictDistributionData}
