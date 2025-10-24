@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { JudgePassRateChart } from "@/components/horizontal-chart";
+import { VerdictDistributionChart } from "@/components/pie-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -292,6 +293,46 @@ export function ResultsSection({
     }));
   }, [evaluations]);
 
+  // Calculate verdict distribution for pie chart
+  const verdictDistributionData = useMemo(() => {
+    const verdictCounts = {
+      pass: 0,
+      fail: 0,
+      inconclusive: 0,
+    };
+
+    // Count each verdict type
+    for (const item of evaluations) {
+      const verdict = item.evaluation.verdict;
+      if (verdict === "pass") {
+        verdictCounts.pass += 1;
+      } else if (verdict === "fail") {
+        verdictCounts.fail += 1;
+      } else {
+        verdictCounts.inconclusive += 1;
+      }
+    }
+
+    // Convert to chart format
+    return [
+      {
+        verdict: "pass" as const,
+        count: verdictCounts.pass,
+        fill: "var(--color-pass)",
+      },
+      {
+        verdict: "fail" as const,
+        count: verdictCounts.fail,
+        fill: "var(--color-fail)",
+      },
+      {
+        verdict: "inconclusive" as const,
+        count: verdictCounts.inconclusive,
+        fill: "var(--color-inconclusive)",
+      },
+    ];
+  }, [evaluations]);
+
   // Toggle row expansion
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows);
@@ -483,7 +524,11 @@ export function ResultsSection({
       {/* Charts Section - Grid for multiple charts */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <JudgePassRateChart data={judgePassRateData} />
-        {/* Additional charts can be added here */}
+        <VerdictDistributionChart
+          data={verdictDistributionData}
+          totalEvaluations={stats.total}
+        />
+        {/* Additional chart can be added here */}
       </div>
 
       <Card>

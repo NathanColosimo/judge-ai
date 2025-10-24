@@ -122,7 +122,7 @@ export function JudgePassRateChart({ data }: JudgePassRateChartProps) {
                 radius={4}
               >
                 <LabelList
-                  className="fill-[--color-label]"
+                  className="fill-white"
                   dataKey="judgeName"
                   fontSize={12}
                   offset={8}
