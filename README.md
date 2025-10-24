@@ -2,6 +2,18 @@
 
 **Time spent**: ~6-8 hours
 
+**Extra features beyond spec**:
+- Actual deployment
+    - Deployed to judge-ai.nathancolosimo.com
+    - because of this, I have extra parts of my app that wouldn't be present if I was just doing a demo.
+- Backend
+    - Since vite was required, I needed a backend so I decided on Hono + oRPC, and deployed that to vercel with the react app too. 
+- Auth:
+    - I implemented simple email + password sign in via better auth.
+    - This lets me separate judges / submissions etc. by userID so other judges and questions aren't accessible by other people!
+    - With more time + in a more B2B style app (this app probably would be) I would have implemented "Organizations" instead of just users, and then all users of that org would have access to that organizations resources. 
+- A few charts + stats on the queue results page
+
 **Tradeoffs:**
 - **Accuracy vs. cost & time:**
     - I used smaller models to reduce cost and have faster evals, but accuracy is probably lower. 
@@ -17,18 +29,6 @@
     - I just kick off a single endpoint / api call to run all the evals for a particular queue. 
     - If the set of evals got larger, where there was hundreds or thousands of evals to run, I would queue everything up in background jobs / processing to prevent running into function duration(if serverless) + memory limits. 
     - doing this synchronously saves dev time
-
-**Extra features beyond spec**:
-- Actual deployment
-    - Deployed to judge-ai.nathancolosimo.com
-    - because of this, I have extra parts of my app that wouldn't be present if I was just doing a demo.
-- Backend
-    - Since vite was required, I needed a backend so I decided on Hono + oRPC, and deployed that to vercel with the react app too. 
-- Auth:
-    - I implemented simple email + password sign in via better auth.
-    - This lets me separate judges / submissions etc. by userID so other judges and questions aren't accessible by other people!
-    - With more time + in a more B2B style app (this app probably would be) I would have implemented "Organizations" instead of just users, and then all users of that org would have access to that organizations resources. 
-- A few charts + stats on the queue results page
 
 ## Stack
 
