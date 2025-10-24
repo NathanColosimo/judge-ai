@@ -20,6 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { JudgePassRateChart } from "@/components/horizontal-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,8 @@ import {
 } from "@/components/ui/table";
 
 const SUBMISSIONS_TRUNCATE_LENGTH = 8;
+const PERCENT_MULTIPLIER = 100;
+const DECIMAL_PRECISION = 10;
 
 type EvaluationItem = {
   evaluation: {
@@ -250,6 +253,45 @@ export function ResultsSection({
     return Array.from(questions);
   }, [evaluations]);
 
+  // Calculate pass rate per judge for chart
+  const judgePassRateData = useMemo(() => {
+    const judgeStats = new Map<
+      string,
+      { passCount: number; totalCount: number }
+    >();
+
+    // Count pass/fail per judge
+    for (const item of evaluations) {
+      const judgeName = item.judge?.name || "Unknown";
+      const current = judgeStats.get(judgeName) || {
+        passCount: 0,
+        totalCount: 0,
+      };
+
+      current.totalCount += 1;
+      if (item.evaluation.verdict === "pass") {
+        current.passCount += 1;
+      }
+
+      judgeStats.set(judgeName, current);
+    }
+
+    // Convert to chart format
+    return Array.from(judgeStats.entries()).map(([judgeName, judgeData]) => ({
+      judgeName,
+      passRate:
+        judgeData.totalCount > 0
+          ? Math.round(
+              (judgeData.passCount / judgeData.totalCount) *
+                PERCENT_MULTIPLIER *
+                DECIMAL_PRECISION
+            ) / DECIMAL_PRECISION
+          : 0,
+      passCount: judgeData.passCount,
+      totalCount: judgeData.totalCount,
+    }));
+  }, [evaluations]);
+
   // Toggle row expansion
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows);
@@ -437,6 +479,12 @@ export function ResultsSection({
           </div>
         </CardContent>
       </Card>
+
+      {/* Charts Section - Grid for multiple charts */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <JudgePassRateChart data={judgePassRateData} />
+        {/* Additional charts can be added here */}
+      </div>
 
       <Card>
         <CardHeader>
