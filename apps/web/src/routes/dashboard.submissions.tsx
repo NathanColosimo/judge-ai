@@ -31,6 +31,8 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { orpc, queryClient } from "@/utils/orpc";
 
+const DUPLICATE_PREVIEW_LIMIT = 5;
+
 // Validation schema matching backend
 const questionSchema = z.object({
   rev: z.number(),
@@ -73,14 +75,37 @@ export default function Submissions() {
   const uploadMutation = useMutation({
     mutationFn: (submissions: z.infer<typeof submissionsArraySchema>) =>
       orpc.submissions.upload.call(submissions),
-    onSuccess: () => {
-      toast.success("Submissions uploaded successfully");
+    onSuccess: (data) => {
+      const { inserted, description } = summarizeUploadResult(data);
+      toast.success(
+        `Uploaded ${inserted} submission${inserted !== 1 ? "s" : ""}`,
+        description ? { description } : undefined
+      );
       queryClient.invalidateQueries();
     },
     onError: (error) => {
       toast.error(`Upload failed: ${error.message}`);
     },
   });
+
+  function summarizeUploadResult(data: unknown): {
+    inserted: number;
+    description?: string;
+  } {
+    const inserted =
+      (data as { insertedCount?: number; count?: number }).insertedCount ??
+      (data as { count?: number }).count ??
+      0;
+    const duplicates = (data as { duplicates?: string[] }).duplicates ?? [];
+    if (duplicates.length === 0) {
+      return { inserted };
+    }
+    const list = duplicates.slice(0, DUPLICATE_PREVIEW_LIMIT).join(", ");
+    const overflow = duplicates.length > DUPLICATE_PREVIEW_LIMIT ? "…" : "";
+    const label = duplicates.length !== 1 ? "IDs" : "ID";
+    const description = `Skipped ${duplicates.length} duplicate ${label}: ${list}${overflow}`;
+    return { inserted, description };
+  }
 
   // Delete mutation
   const deleteMutation = useMutation({

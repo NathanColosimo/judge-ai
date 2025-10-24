@@ -30,6 +30,69 @@ const submissionUploadSchema = z.object({
   answers: z.record(z.string(), answerSchema),
 });
 
+// Process a single submission: insert if not duplicate, otherwise report duplicate
+async function processSingleSubmission(
+  submission: z.infer<typeof submissionUploadSchema>,
+  userId: string
+) {
+  // Check if submission already exists
+  const existing = await db
+    .select()
+    .from(submissions)
+    .where(
+      and(eq(submissions.id, submission.id), eq(submissions.userId, userId))
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    return { duplicateId: submission.id } as const;
+  }
+
+  // Insert submission
+  const [insertedSubmission] = await db
+    .insert(submissions)
+    .values({
+      id: submission.id,
+      queueId: submission.queueId,
+      labelingTaskId: submission.labelingTaskId || null,
+      userId,
+      createdAt: new Date(submission.createdAt),
+      updatedAt: new Date(),
+    })
+    .returning();
+
+  if (!insertedSubmission) {
+    return { duplicateId: submission.id } as const;
+  }
+
+  // Insert questions with answers
+  const questionInserts: (typeof questions.$inferInsert)[] = [];
+  for (const questionObj of submission.questions) {
+    const questionId = questionObj.data.id;
+    const answer = submission.answers[questionId];
+
+    questionInserts.push({
+      id: `${questionId}_${submission.id}`,
+      submissionId: submission.id,
+      queueId: submission.queueId,
+      questionId,
+      questionText: questionObj.data.questionText,
+      questionType: questionObj.data.questionType,
+      questionData: questionObj,
+      answerChoice: answer?.choice || null,
+      answerReasoning: answer?.reasoning || null,
+      answerData: answer || null,
+      createdAt: new Date(),
+    });
+  }
+
+  if (questionInserts.length > 0) {
+    await db.insert(questions).values(questionInserts);
+  }
+
+  return { insertedSubmission } as const;
+}
+
 // Router
 export const submissionsRouter = {
   // Upload submissions from JSON file
@@ -45,77 +108,26 @@ export const submissionsRouter = {
       const duplicateIds: string[] = [];
 
       for (const submission of input) {
-        // Check if submission already exists
-        const existing = await db
-          .select()
-          .from(submissions)
-          .where(
-            and(
-              eq(submissions.id, submission.id),
-              eq(submissions.userId, userId)
-            )
-          )
-          .limit(1);
-
-        if (existing.length > 0) {
-          duplicateIds.push(submission.id);
-          continue; // Skip duplicate
+        const result = await processSingleSubmission(submission, userId);
+        if ("duplicateId" in result) {
+          duplicateIds.push(result.duplicateId as string);
+          continue;
         }
-
-        // Insert submission
-        const [insertedSubmission] = await db
-          .insert(submissions)
-          .values({
-            id: submission.id,
-            queueId: submission.queueId,
-            labelingTaskId: submission.labelingTaskId || null,
-            userId,
-            createdAt: new Date(submission.createdAt),
-            updatedAt: new Date(),
-          })
-          .returning();
-
-        if (insertedSubmission) {
-          insertedSubmissions.push(insertedSubmission);
-
-          // Insert questions with answers
-          const questionInserts: (typeof questions.$inferInsert)[] = [];
-          for (const questionObj of submission.questions) {
-            const questionId = questionObj.data.id;
-            const answer = submission.answers[questionId];
-
-            questionInserts.push({
-              id: `${questionId}_${submission.id}`, // Composite ID
-              submissionId: submission.id,
-              queueId: submission.queueId,
-              questionId,
-              questionText: questionObj.data.questionText,
-              questionType: questionObj.data.questionType,
-              questionData: questionObj,
-              answerChoice: answer?.choice || null,
-              answerReasoning: answer?.reasoning || null,
-              answerData: answer || null,
-              createdAt: new Date(),
-            });
-          }
-
-          if (questionInserts.length > 0) {
-            await db.insert(questions).values(questionInserts);
-          }
+        if ("insertedSubmission" in result) {
+          insertedSubmissions.push(result.insertedSubmission);
         }
       }
 
-      // Return error if any duplicates found
-      if (duplicateIds.length > 0) {
-        throw new Error(
-          `Duplicate submission IDs found: ${duplicateIds.join(", ")}. These submissions already exist and were skipped.`
-        );
-      }
-
+      // Never throw for duplicates; report them in the response
       return {
         success: true,
-        count: insertedSubmissions.length,
+        insertedCount: insertedSubmissions.length,
         submissions: insertedSubmissions,
+        duplicates: duplicateIds,
+        message:
+          duplicateIds.length > 0
+            ? `Skipped ${duplicateIds.length} duplicate submission ID(s).`
+            : undefined,
       };
     }),
 

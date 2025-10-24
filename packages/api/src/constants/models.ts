@@ -1,4 +1,4 @@
-// Available AI Gateway models for judge creation
+// Available OpenRouter models for judge creation
 export const AVAILABLE_MODELS = [
   "google/gemini-2.5-flash-preview-09-2025",
   "anthropic/claude-haiku-4.5",
