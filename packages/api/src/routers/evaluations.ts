@@ -11,6 +11,7 @@ import { generateObject } from "ai";
 import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { AVAILABLE_MODELS } from "../constants/models";
 import { protectedProcedure } from "../index";
 
 const PASS_RATE_PRECISION = 2;
@@ -25,7 +26,6 @@ const openrouter = createOpenRouter({
 const evaluationSchema = z.object({
   verdict: z.enum(["pass", "fail", "inconclusive"]),
   reasoning: z.string().min(MIN_REASONING_LENGTH).max(MAX_REASONING_LENGTH),
-  confidence: z.number().min(0).max(1).optional(),
 });
 
 // Helper function to run a single evaluation
@@ -138,7 +138,8 @@ function fetchQueueQuestions(queueId: string, userId: string) {
 // Helper function to build evaluation tasks (for concurrency control)
 function buildEvaluationTasks(
   assignments: Awaited<ReturnType<typeof fetchQueueAssignments>>,
-  queueQuestions: Awaited<ReturnType<typeof fetchQueueQuestions>>
+  queueQuestions: Awaited<ReturnType<typeof fetchQueueQuestions>>,
+  userId: string
 ) {
   const tasks: Array<
     () => Promise<{
@@ -147,8 +148,17 @@ function buildEvaluationTasks(
     }>
   > = [];
 
+  const allowedModels = new Set<string>(AVAILABLE_MODELS as readonly string[]);
+
   for (const { assignment, judge } of assignments) {
     if (!judge) {
+      continue;
+    }
+    // Enforce judge ownership and model validity
+    if (judge.userId !== userId) {
+      continue;
+    }
+    if (!allowedModels.has(judge.modelName)) {
       continue;
     }
 
@@ -248,7 +258,7 @@ export const evaluationsRouter = {
 
       // Build evaluation tasks and run with concurrency limit
       const CONCURRENCY_LIMIT = 10;
-      const tasks = buildEvaluationTasks(assignments, queueQuestions);
+      const tasks = buildEvaluationTasks(assignments, queueQuestions, userId);
       const plannedCount = tasks.length;
       const results = await runWithConcurrencyLimit(tasks, CONCURRENCY_LIMIT);
 

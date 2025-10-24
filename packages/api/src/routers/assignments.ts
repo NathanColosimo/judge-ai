@@ -24,6 +24,15 @@ export const assignmentsRouter = {
       const inserted: (typeof queueJudgeAssignments.$inferSelect)[] = [];
 
       for (const judgeId of input.judgeIds) {
+        // Ensure the judge belongs to the current user
+        const [ownedJudge] = await db
+          .select()
+          .from(judges)
+          .where(and(eq(judges.id, judgeId), eq(judges.userId, userId)))
+          .limit(1);
+        if (!ownedJudge) {
+          continue;
+        }
         // Check if assignment already exists
         const existing = await db
           .select()
@@ -84,6 +93,15 @@ export const assignmentsRouter = {
       const inserted: (typeof queueJudgeAssignments.$inferSelect)[] = [];
 
       for (const questionId of input.questionIds) {
+        // Ensure the judge belongs to the current user
+        const [ownedJudge] = await db
+          .select()
+          .from(judges)
+          .where(and(eq(judges.id, input.judgeId), eq(judges.userId, userId)))
+          .limit(1);
+        if (!ownedJudge) {
+          continue;
+        }
         // Check if assignment already exists
         const existing = await db
           .select()

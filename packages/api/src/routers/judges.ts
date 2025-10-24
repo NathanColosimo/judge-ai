@@ -2,6 +2,7 @@ import { db, judges } from "@judge-ai/db";
 import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { AVAILABLE_MODELS } from "../constants/models";
 import { protectedProcedure } from "../index";
 
 const MIN_NAME_LENGTH = 1;
@@ -17,7 +18,7 @@ export const judgesRouter = {
       z.object({
         name: z.string().min(MIN_NAME_LENGTH).max(MAX_NAME_LENGTH),
         systemPrompt: z.string().min(MIN_PROMPT_LENGTH).max(MAX_PROMPT_LENGTH),
-        modelName: z.string().min(MIN_NAME_LENGTH), // OpenRouter model name
+        modelName: z.enum(AVAILABLE_MODELS),
         isActive: z.boolean().default(true),
       })
     )
@@ -106,7 +107,7 @@ export const judgesRouter = {
           .min(MIN_PROMPT_LENGTH)
           .max(MAX_PROMPT_LENGTH)
           .optional(),
-        modelName: z.string().min(MIN_NAME_LENGTH).optional(),
+        modelName: z.enum(AVAILABLE_MODELS).optional(),
         isActive: z.boolean().optional(),
       })
     )
